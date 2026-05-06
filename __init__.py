@@ -234,7 +234,7 @@ class UMAOptionsPage(OptionsPage):
     def _create_status_bar(self):
         """Create the always-visible pipeline status indicator bar."""
         status_frame = QFrame()
-        status_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        status_frame.setFrameShape(QFrame.Shape.StyledPanel)
         status_layout = QHBoxLayout()
         status_layout.setContentsMargins(8, 4, 8, 4)
         status_layout.setSpacing(12)
