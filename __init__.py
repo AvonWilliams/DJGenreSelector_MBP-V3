@@ -1,4 +1,5 @@
 from picard.plugin3.api import OptionsPage
+from picard.config import BoolOption, TextOption
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel,
                              QTextEdit, QLineEdit, QCheckBox, QGroupBox, QComboBox,
                              QScrollArea, QWidget, QSizePolicy, QPushButton, QListWidget,
@@ -148,17 +149,9 @@ class UMAOptionsPage(OptionsPage):
     CONFIG_KEY_LAST_PREVIEW = "uma_last_preview"
 
     def __init__(self, api=None, parent=None):
-        self.api = api
+        self.api = api or utils.get_api()
         super().__init__(parent)
 
-    def _get_config(self, key, default=None):
-        if self.api is None:
-            return default
-        try:
-            return self.api.global_config.setting[key]
-        except (KeyError, TypeError, AttributeError):
-            return default
-        
         # Initialize persistent preview state
         self._preview_state = {
             "mbid": "",
@@ -227,10 +220,18 @@ class UMAOptionsPage(OptionsPage):
         
         # Connect sidebar navigation
         self._connect_navigation()
-        
+
         # Initialize status bar
         self._update_status_bar()
-    
+
+    def _get_config(self, key, default=None):
+        if self.api is None:
+            return default
+        try:
+            return self.api.global_config.setting[key]
+        except (KeyError, TypeError, AttributeError):
+            return default
+
     def _create_status_bar(self):
         """Create the always-visible pipeline status indicator bar."""
         status_frame = QFrame()
@@ -384,7 +385,7 @@ class UMAOptionsPage(OptionsPage):
         
         token_layout = QHBoxLayout()
         self.input_discogs_token = QLineEdit()
-        self.input_discogs_token.setEchoMode(QLineEdit.Password)
+        self.input_discogs_token.setEchoMode(QLineEdit.EchoMode.Password)
         self.input_discogs_token.setPlaceholderText("Enter your Discogs token")
         self.input_discogs_token.setToolTip("Required for Discogs API access. Get token at discogs.com/settings/developers")
         token_layout.addWidget(self.input_discogs_token)
@@ -937,7 +938,7 @@ class UMAOptionsPage(OptionsPage):
         )
         self.input_generic_genres.setToolTip("Patterns support wildcards (* matches any text). Matching is case-insensitive. These filters run AFTER cluster selection and hashtag generation.")
         # Expand editor to use available height
-        self.input_generic_genres.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.input_generic_genres.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self.input_generic_genres)
         
         layout.addStretch()
@@ -2461,7 +2462,7 @@ def album_processor(api, album, metadata, release):
         release_group = release.get("release-group") if release and isinstance(release, dict) else None
         bc_url, bc_source = sources.resolve_bandcamp_url(album, release, release_group)
         task_id = f'dj_genre_bandcamp_{id(album)}'
-        api.add_album_task(album, task_id, 'Fetching Bandcamp genres')
+        api.add_album_task(album, task_id, 'Fetching Bandcamp genres', blocking=True)
 
         if bc_url:
             utils.log_info(f"UMA: bandcamp: fetching metadata from URL: {bc_url} (found in {bc_source})")
@@ -2496,7 +2497,7 @@ def album_processor(api, album, metadata, release):
             release_group = release.get("release-group") if release and isinstance(release, dict) else None
             album._uma_release_group = release_group
         task_id = f'dj_genre_discogs_{id(album)}'
-        api.add_album_task(album, task_id, 'Fetching Discogs genres')
+        api.add_album_task(album, task_id, 'Fetching Discogs genres', blocking=True)
         src = sources.get_source("discogs")
         src.fetch(album, _make_callback(api, album, col, "discogs", task_id, album_title))
 
@@ -2580,7 +2581,7 @@ def _find_bandcamp_url(release):
     utils.log_info("UMA: bandcamp: no Bandcamp URL found in relations")
     return None
 
-def track_processor(api, track, metadata):
+def track_processor(api, track, metadata, track_node=None, release_node=None):
     """
     Called for each track when it's processed.
     This ensures that tracks created after UMA's album processor runs
@@ -2641,6 +2642,25 @@ def track_processor(api, track, metadata):
 
 def enable(api):
     """Called when plugin is enabled."""
+    BoolOption("setting", "uma_enabled", True)
+    BoolOption("setting", "uma_debug", False)
+    BoolOption("setting", "uma_enable_bandcamp", True)
+    BoolOption("setting", "uma_enable_discogs", True)
+    TextOption("setting", "uma_discogs_token", "")
+    BoolOption("setting", "uma_bandcamp_fallback_search", False)
+    TextOption("setting", "uma_priority_genre", "bandcamp,discogs")
+    TextOption("setting", "uma_mode_genre", "append")
+    TextOption("setting", "uma_priority_style", "discogs,bandcamp")
+    TextOption("setting", "uma_mode_style", "append")
+    TextOption("setting", "uma_tag_mapping", "")
+    BoolOption("setting", "uma_mapping_use_regex", False)
+    BoolOption("setting", "uma_mapping_first_match_only", False)
+    TextOption("setting", "uma_mapping_mode", "first_match")
+    BoolOption("setting", "uma_filter_tags_with_mapping", False)
+    TextOption("setting", "uma_generic_genres", "Electronic\nElectronica\nElectronic Music\nRock\nPop")
+    TextOption("setting", "uma_preview_last_mbid", "")
+    TextOption("setting", "uma_preview_last_result", "")
+    TextOption("setting", "uma_last_preview", "")
     utils.set_api(api)
     utils.migrate_legacy_config()
     api.register_album_metadata_processor(album_processor)
